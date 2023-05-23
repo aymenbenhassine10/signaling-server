@@ -1,4 +1,5 @@
 // requires
+const { log } = require('console');
 const express = require('express');
 const app = express();
 var http = require('http').Server(app);
@@ -46,6 +47,7 @@ io.on('disconnect', function(reason){
 // variables
 var kurentoClient = null;
 var iceCandidateQueues = {};
+// io.sockets.adapter.rooms = []
 
 // constants
 var argv = minimist(process.argv.slice(2), {
@@ -60,7 +62,7 @@ var argv = minimist(process.argv.slice(2), {
 
 // signaling
 io.on('connection', function (socket) {
-    console.log('a user connected');
+    console.log('a user connected ' + socket.id);
 
     socket.on('message', function (message) {
         console.log('Message received: ', message.event);
@@ -102,6 +104,7 @@ io.on('connection', function (socket) {
 // signaling functions
 function joinRoom(socket, username, roomname, callback) {
     getRoom(socket, roomname, (err, myRoom) => {
+        console.log("inside getRoom callback"+ myRoom)
         if (err) {
             return callback(err);
         }
@@ -216,7 +219,9 @@ function addIceCandidate(socket, senderid, roomname, iceCandidate, callback) {
 
 // useful functions
 async function getRoom(socket, roomname, callback) {
-    var myRoom = io.sockets.adapter.rooms.get(roomname) || {length: 0};
+    console.log("getting room")
+    var myRoom = io.sockets.adapter.rooms.get(roomname) || {"length": 0};
+    console.log("my room : "+JSON.stringify(myRoom))
     var numClients = myRoom.length;
 
     console.log(roomname, ' has ', numClients, ' clients');
@@ -246,6 +251,7 @@ async function getRoom(socket, roomname, callback) {
 
 }
 function getEndpointForUser(socket, roomname, senderid, callback) {
+    console.log("getting endpoint for user");
     var myRoom = io.sockets.adapter.rooms.get(roomname);
     var asker = myRoom.participants[socket.id];
     var sender = myRoom.participants[senderid];
