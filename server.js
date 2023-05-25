@@ -150,7 +150,7 @@ function joinRoom(socket, username, roomname, callback) {
                 if (myRoom.participants[i].id != user.id) {
                     existingUsers.push({
                         id: myRoom.participants[i].id,
-                        name: myRoom.participants[i].name,
+                        name: myRoom.participants[i].name
                     });
                 }
             }
