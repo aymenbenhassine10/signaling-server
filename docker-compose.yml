@@ -1,7 +1,128 @@
 version: '3.7'
 services:
+  zookeeper:
+    image: zookeeper:3.7.0
+    container_name: zookeeper
+    restart: "no"
+    networks:
+      - elyageek
+    ports:
+      - "2181:2181"
+  kafka:
+    image: obsidiandynamics/kafka
+    container_name: kafka
+    restart: "no"
+    networks:
+      - elyageek
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: DOCKER_INTERNAL:PLAINTEXT,DOCKER_EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: DOCKER_INTERNAL://:29092,DOCKER_EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: DOCKER_INTERNAL://kafka:29092,DOCKER_EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER_INTERNAL
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+
+  event-management:
+    build: ./elyageek-event-service
+    container_name: event-management
+    ports:
+      - 8084:8084
+    networks:
+      - elyageek
+    environment:
+      - SERVER_PORT=8084
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - DATABASE_NAME=eventDB
+      - DB_HOST=postgres
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - DB_PORT=5432
+      - KAFKA_AUTO_OFFSET_RESET=earliest
+      - KAFKA_EVENT_TOPIC=event
+    depends_on:
+      - kafka
+      - postgres
+  postgres:
+    image: postgres
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - elyageek
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: example_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    ports:
+      - "5050:80"
+    networks:
+      - elyageek
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+
+  frontend:
+    build: ./elyageek-frontend
+    ports:
+      - 4200:80
+    container_name: angular-container
+    environment:
+      SIGNALING_SERVER_URI: http://localhost:3000
+      EVENT_URI: http://localhost:8084
+      KEYCLOACK_URI: http://localhost:8080
+    depends_on:
+      - keycloak
+      - signaling-server
+      - event-management
+    networks:
+      - elyageek
+
+  mariadb:
+    image: mariadb
+    networks:
+      - elyageek
+    ports:
+      - '3306:3306'
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=keycloak
+      - MYSQL_USER=keycloak
+      - MYSQL_PASSWORD=password
+
+  keycloak:
+    networks:
+      - elyageek
+    image: 'quay.io/keycloak/keycloak:15.0.1'
+    ports:
+      - '8080:8080'
+    environment:
+      - KEYCLOAK_USER=admin
+      - KEYCLOAK_PASSWORD=admin
+      - DB_VENDOR=mariadb
+      - DB_ADDR=mariadb
+      - DB_DATABASE=keycloak
+      - DB_USER=keycloak
+      - DB_PASSWORD=password
+      - JGROUPS_DISCOVERY_PROTOCOL=JDBC_PING
+      - KEYCLOAK_IMPORT=/tmp/realm-export.json
+    volumes:
+      - ./realm-export.json:/tmp/realm-export.json
+    depends_on:
+      - mariadb
+
   signaling-server:
-    build: ./
+    build: ./signaling-server
     ports:
       - 3000:3000
     depends_on:
@@ -9,9 +130,26 @@ services:
     environment:
       - WS_URI=ws://localhost:8888/kurento
     network_mode: host
+    # networks:
+    #   - elyageek
+    
+
   media_server:
     image: kurento/kurento-media-server:6.18.0
     restart: always
     ports:
       - 8888:8888
     network_mode: host
+
+volumes:
+  mongoVolume:
+  postgres_data_dev:
+  db_data:
+  dev-bitbucket-airflow-postgres:
+  dev-bitbucket-airflow-logs:
+  elasticsearch-data-elyageek:
+    driver: local
+
+networks:
+  elyageek:
+    driver: bridge
