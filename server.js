@@ -38,6 +38,13 @@ var argv = minimist(process.argv.slice(2), {
 // signaling
 io.on("connection", function (socket) {
   console.log("a user connected " + socket.id);
+  socket.on("disconnect", function (reason) {
+    leaveRoomOnDisconnect(socket, (err) => {
+      if (err) {
+        console.log(err);
+      }
+    });
+  });
 
   socket.on("message", function (message) {
     console.log("Message received: ", message.event);
@@ -98,6 +105,25 @@ io.on("connection", function (socket) {
   });
 });
 
+// get roomName by Socket ID
+function getRoomNameBySocketId(socketId) {
+  let result = "";
+  let list = Array.from(io.sockets.adapter.rooms);
+  list = list
+    .filter(([key, value]) => Object(value).participants)
+    .filter(([key, value]) => {
+      if (Object(value.participants[socketId]).id == socketId) result = key;
+    });
+  return result;
+}
+
+function leaveRoomOnDisconnect(socket, callback) {
+  let roomname = getRoomNameBySocketId(socket.id);
+  if (roomname) {
+    leaveRoom(socket, roomname, callback);
+  }
+}
+
 //left Room
 function leaveRoom(socket, roomname, callback) {
   console.log("leaving room");
@@ -105,6 +131,7 @@ function leaveRoom(socket, roomname, callback) {
   let myRoom = io.sockets.adapter.rooms.get(roomname);
   if (myRoom) {
     let user = myRoom.participants[socket.id];
+    console.log("user left : ", user);
 
     if (user) {
       delete myRoom.participants[socket.id];
@@ -115,9 +142,14 @@ function leaveRoom(socket, roomname, callback) {
       });
     }
   }
-
   // Send callback with success
   callback(null);
+
+  // console.log(io.sockets.adapter.rooms.values());
+
+  // console.log(io.sockets.adapter.rooms.values().get(socket.id))
+  // io.sockets.adapter.rooms.map((key,value)=>{console.log("key : ",key)})
+  // console.log("socket id : ",socket.id,"rooms  : ",io.sockets.adapter.rooms,"room of this socket : ",io.sockets.adapter.rooms.get(socket.id));
 }
 
 // signaling functions
